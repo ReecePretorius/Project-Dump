@@ -1,0 +1,284 @@
+---
+title: "480B_A1"
+format: html
+editor: visual
+Author: Reece Pretorius
+---
+
+# **480B Assignment #1**
+
+### Reece Pretorius
+
+## Setup Packages
+
+```{r}
+#install.packages("dplyr") # for pipes
+#install.packages("ggplot2")
+```
+
+```{r}
+library(dplyr) # for pipes
+library(ggplot2)
+```
+
+## **Assign Data-set Paths**
+
+```{r}
+valPath <- "C:/Users/V/Desktop/go-dataset1.csv"
+trainPath <- "C:/Users/V/Desktop/wikimedia-dataset1.csv"
+
+trainDataset <- read.csv(trainPath)
+valDataset <- read.csv(valPath)
+```
+
+## **Display scatter plot(s) and histogram(s) before cleaning**
+
+```{r}
+ggplot(trainDataset, aes(y = numPatch, x = patchSize)) +
+  geom_point(color = 'steelblue') +
+  labs(x = "patch size", y = "number of iterations (numPatch)") +
+  ggtitle("num patch vs patch size") +
+  geom_smooth(method='lm', formula= y~x, color = 'red')
+
+ggplot(trainDataset, aes(y = numPatch, x = reviewInterval)) +
+  geom_point(color = 'steelblue') +
+  labs(x = "review interval", y = "number of iterations (numPatch)") +
+  ggtitle("num patch vs review interval") +
+  geom_smooth(method='lm', formula= y~x, color = 'red')
+
+ggplot(trainDataset, aes(y = numPatch, x = totalCommit)) +
+  geom_point(color = 'steelblue') +
+  labs(x = "total commits", y = "number of iterations (numPatch)") +
+  ggtitle("num patch vs number of commits") +
+  geom_smooth(method='lm', formula= y~x, color = 'red')
+```
+
+## Data Exploration and Cleaning
+
+```{r}
+#get dataset for model training
+trainDataset <- read.csv(trainPath)
+
+message("maximum deletions: ", max(trainDataset$deletions))
+message("maximum insertions: ", max(trainDataset$insertions))
+
+#Trim outliers for patchSize and any patch size entries with zero
+trainDataset_trimmed <- subset(trainDataset, patchSize < 1000 & patchSize > 0)
+
+#Trim negative values from review interval
+trainDataset_trimmed <- subset(trainDataset_trimmed, reviewInterval > 0)
+
+#Display number of rows that were trimmed
+message("Trimmed ", nrow(trainDataset) - nrow(trainDataset_trimmed), " lines")
+
+#set cleaned dataset to be used
+trainDataset <- trainDataset_trimmed
+
+#Remove unneeded columns (binary/catagorical ones that dont work well with linear regression models)
+trainDataset <- data.frame(numPatch = trainDataset$numPatch, 
+                           patchSize = trainDataset$patchSize,
+                           reviewInterval = trainDataset$reviewInterval,
+                           totalCommit = trainDataset$totalCommit)
+```
+
+**View Cleaned Dataset (I also check for multicollinearity here)**
+
+```{r}
+View(trainDataset)
+
+#check for multicollinearity
+cor(trainDataset, method = "pearson")
+```
+
+**View Variable balance (not super useful for the variables we will be using)**
+
+```{r}
+#Assign the column/variable you want to check here.
+column <- trainDataset$numPatch
+
+#table(column)
+barplot(table(column))
+```
+
+## **Display scatter plot(s) and histogram(s) after cleaning**
+
+```{r}
+#plot(trainDataset$numPatch ~ trainDataset$patchSize)
+#abline(myModel, col='red')
+
+ggplot(trainDataset, aes(y = numPatch, x = patchSize)) +
+  geom_point(color = 'steelblue') +
+  labs(x = "patch size", y = "number of iterations (numPatch)") +
+  ggtitle("num patch vs patch size") +
+  geom_smooth(method='lm', formula= y~x, color = 'red')
+
+ggplot(trainDataset, aes(y = numPatch, x = reviewInterval)) +
+  geom_point(color = 'steelblue') +
+  labs(x = "review interval", y = "number of iterations (numPatch)") +
+  ggtitle("num patch vs review interval") +
+  geom_smooth(method='lm', formula= y~x, color = 'red')
+```
+
+**Q1a. What interesting insights do you see?**
+
+-   Before cleaning any of the data I display a few plots of my dependent variable(**numPatch**) vs a few potential independent variables. The first of these is '**numPatch**' vs '**patchSize**' because it is reasonable to assume that as the patch size increases(number of insertions + number of deletions) the number of iterations for the CR and commits will also increase. On the plot we can see that this is not really the case in this dataset because there are some major outliers, I would think that these would align with large amounts of deletions when say there was old/dead code removed so I decided to remove these outliers from the dataset during the cleaning step.
+
+-   For the '**numPatch**' vs '**totalCommits**' plot we can see that as the total commits increases there is a general downward trend in the number of iterations, to me this makes sense as the person is more experienced with the code they are working on the CR process would tend to be shorter.
+
+-   For the '**numPatch**' vs '**reviewInterval**' plot we can see that the longer the time to complete the review the more iterations there are, this makes sense because longer review interval could mean that changes and improvements were discussed and then iterated on. I did find some negative values from viewing the plot for this and proceeded to trim those as we can't have negative time.
+
+-   I also checked for multicollinearity of the independent variables I have chosen and they all seem viable from this initial check.
+
+**Q1b. What concerns might you have about this data?**
+
+-   Balance: variables like 'Gender' are highly unbalanced where as variables including 'isGenderNeutral' are only slightly imbalanced, for our case using linear regression these however are not useful variables and are dropped during the cleaning step.
+
+-   There seems to be a large variation in the patch size, this is normal as a user can have quick small changes that are committed and reviewed quickly, but when trying to use this as a metric for predicting the number of iterations the outliers that have very long review times for those same small commits really skew the data.
+
+-   I also am having trouble finding a really good relationship between the data points because they are so extremely varied, I am concerned that this will reduce the accuracy of the model.
+
+## Model Specification
+
+```{r}
+#set dependant variable(s)/values to predict
+numPatch <- trainDataset$numPatch
+
+#set independant predictor variable(s)
+patchSize <- trainDataset$patchSize
+totalCommit <- trainDataset$totalCommit
+reviewInterval <- trainDataset$reviewInterval
+
+#experimental
+#revExp <- trainDataset$revExp
+```
+
+**Q2a. What is the model specification?**
+
+-   For my model I have decided that I want to predict the number of iterations in a code review (commits and reviews) so I have set '**numPatch**' as the dependent variable.
+
+-   For the independent predictor variables, after exploring the data and analyzing the plots in the previous section I have chosen '**patchSize**', '**totalCommit**', and '**reviewInterval**' as my independent variables for my model.
+
+-   I end up dropping '**totalCommit**' from the model as it did not affect the final result in any meaningful way.
+
+## Model Estimation
+
+```{r}
+myModel <- lm(numPatch ~ patchSize + reviewInterval, 
+              data = trainDataset)
+
+# Display summary of model results
+summary(myModel)
+
+# Plot various residual plots
+plot(myModel)
+```
+
+```{r}
+# Plot histogram of residuals
+ggplot(data = trainDataset, aes(x = myModel$residuals)) +
+    geom_histogram(fill = 'lightblue', color = 'black', bins=60) +
+    labs(title = 'Histogram of Residuals', x = 'Residuals', y = 'Frequency')
+
+# Plot regression line
+ggplot(trainDataset, aes(y = numPatch, x = patchSize, color = reviewInterval)) +
+  geom_point() +
+  labs(x = "patch size", y = "number of iterations (numPatch)") +
+  ggtitle("Regression Line") +
+  geom_abline(slope = myModel$coefficients[2] + myModel$coefficients[3],
+              intercept = myModel$coefficients[1],
+              color = 'red')
+```
+
+**Q3a: what are your regression results?**
+
+-   **Multiple R-squared:** (0.1202 = 12.02% of the variation can be explained by the model)
+    -   For my model we can see the value for multiple R-squared is **12.02%** so it is fairly low but this does not necessarily mean that it is a bad model, so we will look at the residuals next to further investigate.
+-   **Residuals:**
+    -   I plotted the residuals of the model using "**Plot(myModel)**" as well as a histogram of the residuals. If we look at the histogram we can see that the residuals are fairly evenly placed over zero with majority being close to zero.
+-   **P-values:**
+    -   The P-values for my coefficients are **very small**(**\<2e-16**), and this is another indicator that the independent variables are statistically significant and that the changes in the independent variables have a great effect on the dependent variable we are predicting.
+-   **Regression Line:**
+    -   Plotting the regression line over the variables using the slope and intercepts from the model we can see how the model is fitted although this plot does not give us much to go off of, at least for me.
+
+**Q3b: what is your interpretation of those results?**
+
+-   Looking at the "**Residuals vs Fitted**" plot from plotting the model we can see that the spread of the fitted values are not placed evenly over the line and this would tell us about the models linearity and weather it is a good fit for our dataset. In this case it doesn't seem to be that great of a result but the spread is better for the fitted values in the range 10-20 with only a few outliers.
+-   Looking at the coefficient results for the model we can see that they are positive, which indicates that as the independent variables(**patchSize**, **reviewInterval**) increase so will the dependent variable(**numPatch**), to me this makes sense because you would expect the number of iterations for a patch code review or commits to be higher if the number of lines added or deleted in a commit or CR increases and the same goes for the review interval, it makes sense that you would expect the number of iterations to be higher if more time is spent during the review, as this could mean improvements to the commit would be suggested during the CR hence lengthening the review interval.
+
+## Model Evaluation
+
+```{r}
+valDataset <- read.csv(valPath)
+```
+
+```{r}
+#new_frame <- data.frame(
+#  patchSize = valDataset$patchSize, 
+#  reviewInterval = valDataset$reviewInterval, 
+#  totalCommit = valDataset$totalCommit)
+
+#totalCommit ~ tenure + revExp + reviewInterval
+new_frame <- data.frame(
+  patchSize = valDataset$patchSize,
+  reviewInterval = valDataset$reviewInterval)
+
+result <- predict(myModel, new_frame) %>% round(0)
+
+#View(result)
+```
+
+**View Result**
+
+```{r}
+message("Lowest prediction: ", min(result))
+message("Highest prediction: ", max(result))
+
+comparison_frame <- data.frame(
+  known = valDataset$numPatch,
+  predicted = result)
+
+View(comparison_frame)
+```
+
+```{r}
+original <- comparison_frame$known
+predicted <- comparison_frame$predicted
+
+comparison_frame$accuracy <- ifelse(original < predicted, 'over',
+                                    ifelse(original > predicted, 'under', 'match'))
+
+#check +/- 1 accuracy
+#comparison_frame$accuracy <- ifelse(original +1 < predicted, 'over',
+#                                    ifelse(original - 1 > predicted, 'under',
+#                                           'match'))
+
+View(comparison_frame)
+
+matched_total <- filter(comparison_frame, accuracy == 'match') %>% nrow()
+over_total <- filter(comparison_frame, accuracy == 'over') %>% nrow()
+under_total <- filter(comparison_frame, accuracy == 'under') %>% nrow()
+
+# Calculate percentage accuracy of prediction (exact matches)
+percent_accuracy <- matched_total / nrow(comparison_frame) * 100
+
+message("Predictions that are over: ", over_total)
+message("Predictions that are under: ", under_total)
+message("Predictions that match exactly: ", matched_total)
+message("percent accuracy: ", percent_accuracy %>% round(1), "%")
+```
+
+**Q4a: what is the predictive accuracy of your regression model?**
+
+-   Running the model on the other dataset, in my case that was the go dataset I get **34%** accuracy with my predicted values as compared to the actual values for '**numPatch**' in the dataset (these are percentages for exact matches and not percentage of how close the predictions were when they were not exact matches). I can also note that the majority of the predictions are exact matches or are under predicted, whereas we have less predictions that are over the actual original value. You can see this in more detail by viewing the '**comparison_frame**'.
+
+-   When checking the accuracy if we count a prediction that is within **plus or minus one** of the actual value in the dataset, I then get an accuracy of **62.9%,** this is just a rough percentage check I did for fun but isn't super useful in seeing the range of error for the predictions.
+
+-   It is worth noting that without any additional changes to the initial model, the predicted values for '**numPatch**' for smaller values are more accurate but when looking at the original dataset column there is often a big gap between the predicted result and the actual values when the original value is higher. **i.e. an original value of 17 got a prediction of 2**
+
+## Model Interpretation
+
+To conclude, I created a model to predict the number of iterations (commits or code reviews) for a given patch size (insertions + deletions) and review interval times. I found that during the data exploration phase there were many challenges to find exactly which variable I wanted to predict and to then find patterns in the data to pick appropriate predictor variables. I used the larger of the two datasets to do the training of the model because the values for the patch size were much larger in more of the entries and I felt that it would not work as well the other way around as we would not be able to predict for patch sizes that were larger than any of the entries in the go dataset that I used for validation. I tried to adjust for this by trimming the large outliers for patch size in the cleaning step. I would say that the results are fairly valid as is but could surely be improved as many of the predictions are under what would be expected, after testing with multiple combinations for independent variables the above result is the best I could come up with, and I would attribute the low accuracy to improper data cleaning and a lesser understanding of the model's metrics. The same would go for the reliability of the model, I would say it is more reliable in predicting iterations for smaller patch sizes and gets more inaccurate for larger patch sizes.
+
+Some other insights I gained during this assignment was that some metrics that I thought would affect the dependent variable greatly were proven to be insignificant based on the given datasets, and others that had a greater affect did not increase the accuracy in any meaningful way, again I would attribute this to the cleaning step as well as the step in selecting the variables to use being very important. I also see the iterative nature of creating a regression model, the process is very reliant on iteration to improve the accuracy of your predictions.
+
+As for ethical questions that arise, I would say that there would be questions about the ethical nature of a model like this if it were to be based on gender, say if the model was trained on a subset of the data for one gender and then used to predict outcomes for the other gender(s), but other than that I cannot really say that it is unethical to try and predict the number of iterations it may take to make it through the CR process based on the amount of changes you made.

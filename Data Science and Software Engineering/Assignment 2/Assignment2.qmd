@@ -1,0 +1,80 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+df <- read.csv("C:/Users/V/Desktop/nasa93_subset.csv")
+```
+
+You can add options to executable code like this
+
+```{r}
+library(foreign)
+df_full <- read.arff("C:/Users/V/Desktop/nasa93.arff")
+View(df_full)
+```
+
+```{r}
+library(foreign)
+library(dagitty)
+library(ggdag)
+library(ggplot2)
+library(dplyr) # for pipes
+```
+
+```{r}
+
+target <- df
+#  using more R-like syntax to create the same DAG
+tidy_ggdag <- dagify(
+  y ~ x + z2 + w2 + w1,
+  x ~ z1 + w1 + w2,
+  z1 ~ w1 + v,
+  z2 ~ w2 + v,
+  w1 ~ ~w2, # bidirected path
+  exposure = "x",
+  outcome = "y"
+) %>%
+  tidy_dagitty()
+
+ggdag(tidy_ggdag) +
+  theme_dag()
+
+tidy_ggdag
+```
+
+```{r}
+install.packages("remotes")
+remotes::install_github("stan-dev/cmdstanr")
+install.packages(c("coda","mvtnorm","devtools","loo"))
+library(devtools)
+devtools::install_github("rmcelreath/rethinking")
+```
+
+```{r}
+library("rethinking")
+```
+
+```{r}
+df$cplx <- as.factor(df$cplx)
+df$acap <- as.factor(df$acap)
+df$pcap <- as.factor(df$pcap)
+df$cat2 <- as.factor(df$cat2)
+df$cplx <- as.numeric(unclass(df$cplx))
+df$acap <- as.numeric(unclass(df$acap))
+df$pcap <- as.numeric(unclass(df$pcap))
+df$cat2 <- as.numeric(unclass(df$cat2))
+str(df)
+#View(df)
+formula <- ulam(df$act_effort ~ df$cplx + df$acap + df$pcap, data = df)
+```
